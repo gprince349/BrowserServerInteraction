@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Browser-Server Communication Test</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h1>Browser-Server Communication Tester</h1>
+
+<div class="container">
+    <div class="left-panel">
+        <button onclick="testHttpFetch()">Try HTTP Fetch</button>
+        <button onclick="testHttpAjax()">Try HTTP AJAX (XHR)</button>
+        <button onclick="testWebSocket()">Connect WebSocket</button>
+        <button onclick="disconnectWebSocket()">Disconnect WebSocket</button>
+        <button onclick="testSSE()">Start SSE</button>
+        <button onclick="stopSSE()">Stop SSE</button>
+        <button onclick="testLongPolling()">Start Long Polling</button>
+        <button onclick="stopLongPolling()">Stop Long Polling</button>
+    </div>
+
+    <div class="right-panel">
+        <div class="window http-window">
+            <h2>HTTP Fetch Responses</h2>
+            <div id="fetchOutput" class="log"></div>
+        </div>
+
+        <div class="window ajax-window">
+            <h2>HTTP AJAX (XHR) Responses</h2>
+            <div id="ajaxOutput" class="log"></div>
+        </div>
+
+        <div class="window websocket-window">
+            <h2>WebSocket Messages</h2>
+            <div id="wsOutput" class="log"></div>
+        </div>
+
+        <div class="window sse-window">
+            <h2>SSE Messages</h2>
+            <div id="sseOutput" class="log"></div>
+        </div>
+
+        <div class="window longpoll-window">
+            <h2>Long Polling Messages</h2>
+            <div id="longpollOutput" class="log"></div>
+        </div>
+    </div>
+</div>
+<script>
+    function appendOutput(id, text) {
+      const el = document.getElementById(id);
+      el.textContent += `[${new Date().toLocaleTimeString()}] ` + text + '\n';
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function testHttpFetch() {
+      fetch('/api/hello')
+        .then(response => response.text())
+        .then(data => {
+          appendOutput('fetchOutput', 'Fetch Response: ' + data);
+        })
+        .catch(err => {
+          appendOutput('fetchOutput', 'Fetch Error: ' + err.message);
+        });
+    }
+
+    function testHttpAjax() {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', '/api/hello', true);
+      xhr.onload = function() {
+        if (xhr.status === 200) {
+          appendOutput('ajaxOutput', 'AJAX Response: ' + xhr.responseText);
+        } else {
+          appendOutput('ajaxOutput', 'AJAX Error: Status ' + xhr.status);
+        }
+      };
+      xhr.onerror = function() {
+        appendOutput('ajaxOutput', 'AJAX Request Failed');
+      };
+      xhr.send();
+    }
+
+    let ws;
+    function testWebSocket() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('Ping from client');
+        return;
+      }
+      ws = new WebSocket(`ws://${location.host}/ws`);
+      ws.onopen = () => {
+        appendOutput('wsOutput', 'WebSocket connected.');
+        ws.send('Hello Server!');
+      };
+      ws.onmessage = (event) => {
+        appendOutput('wsOutput', 'Message: ' + event.data);
+      };
+      ws.onerror = (err) => {
+        appendOutput('wsOutput', 'WebSocket error occurred.');
+      };
+      ws.onclose = () => {
+        appendOutput('wsOutput', 'WebSocket closed.');
+      };
+    }
+
+    function disconnectWebSocket() {
+      if (ws) {
+        ws.close();
+        appendOutput('wsOutput', 'Disconnected WebSocket manually.');
+      }
+    }
+
+    let sse;
+    function testSSE() {
+      if (sse) return;
+      sse = new EventSource('/api/sse');
+      sse.onmessage = (event) => {
+        appendOutput('sseOutput', 'SSE: ' + event.data);
+      };
+      sse.onerror = (err) => {
+        appendOutput('sseOutput', 'SSE connection closed due to error.');
+        sse.close();
+        sse = null;
+      };
+    }
+
+    function stopSSE() {
+      if (sse) {
+        sse.close();
+        sse = null;
+        appendOutput('sseOutput', 'SSE connection stopped manually.');
+      }
+    }
+
+    let longPollActive = false;
+    function testLongPolling() {
+      longPollActive = true;
+      function poll() {
+        if (!longPollActive) return;
+        fetch('/api/long-poll')
+          .then(response => response.text())
+          .then(data => {
+            appendOutput('longpollOutput', 'Polling: ' + data);
+            setTimeout(poll, 1000);
+          })
+          .catch(err => {
+            appendOutput('longpollOutput', 'Polling Error: ' + err.message);
+            setTimeout(poll, 2000);
+          });
+      }
+      poll();
+    }
+
+    function stopLongPolling() {
+      longPollActive = false;
+      appendOutput('longpollOutput', 'Stopped Long Polling.');
+    }
+  </script>
+</body>
+</html>
